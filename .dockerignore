@@ -1,0 +1,11 @@
+.git
+.next
+node_modules
+.wwebjs_auth
+.wwebjs_cache
+npm-debug.log
+Dockerfile
+.dockerignore
+.env*.local
+.env
+.DS_Store

@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Admin permissions (if you have an admins collection)
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // Donors collection
+    match /donors/{userId} {
+      allow read: if request.auth != null; // Registered donors can read
+      allow create: if request.auth != null; 
+      allow update: if request.auth != null && request.auth.uid == userId; // Users update their own profile
+      allow delete: if isAdmin();
+    }
+
+    // Referrals collection (NEW)
+    match /referrals/{referralId} {
+      // Allow authenticated donors to create referrals
+      allow create: if request.auth != null;
+      // Allow admins to read/write all referrals
+      allow read, write: if isAdmin();
+      // Allow users to read referrals they created
+      allow read: if request.auth != null && resource.data.referredByUserId == request.auth.uid;
+    }
+
+    // Emergency Requests
+    match /emergencyRequests/{requestId} {
+      allow read: if true; // Public can see active requests
+      allow create: if true; // Anyone can create an emergency request
+      allow update, delete: if isAdmin();
+    }
+    
+    // Admins
+    match /admins/{userId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Only manageable via Firebase Console
+    }
+  }
+}
