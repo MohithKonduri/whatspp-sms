@@ -64,54 +64,21 @@ export async function initializeWhatsApp(waitForReady: boolean = true): Promise<
         throw new Error("Failed to load WhatsApp dependencies")
       }
 
-      // Use OS-specific temp directory for Chrome and Auth data
-      const os = await import("os")
-      const fs = await import("fs")
-      const path = await import("path")
-
-      const tmpDir = os.tmpdir()
-      const userDataDir = path.join(tmpDir, "wwebjs_chrome_data")
-      const authDataPath = path.join(tmpDir, "wwebjs_auth")
-      const lockFile = path.join(userDataDir, "SingletonLock")
-
-      try {
-        if (fs.existsSync(lockFile)) {
-          console.log("🧹 Removing stale Chrome lock file...")
-          fs.unlinkSync(lockFile)
-        }
-      } catch (err) {
-        console.warn("⚠️ Could not remove stale lock:", err)
-      }
-
       state.client = new Client({
         authStrategy: new LocalAuth({
-          dataPath: authDataPath,
+          dataPath: "/var/data/whatsapp" // persistent disk
         }),
-        authTimeoutMs: 120000, // Increased to 120s for slow Render instances
-        webVersionCache: {
-          type: 'remote',
-          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
-        },
         puppeteer: {
           headless: true,
           args: [
             "--no-sandbox",
             "--disable-setuid-sandbox",
             "--disable-dev-shm-usage",
-            "--disable-accelerated-2d-canvas",
-            "--no-first-run",
-            "--no-zygote",
             "--disable-gpu",
-            "--disable-extensions",
-            "--remote-debugging-port=9222",
-            `--user-data-dir=${userDataDir}`,
-            "--disable-crash-reporter",
-            "--disable-software-rasterizer",
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-            "--disable-web-security",
-          ],
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (process.platform === 'win32' ? undefined : "/usr/bin/google-chrome-stable"),
-        },
+            "--no-zygote",
+            "--single-process"
+          ]
+        }
       })
 
       state.client.on("qr", async (qr: string) => {
