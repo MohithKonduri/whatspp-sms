@@ -21,6 +21,7 @@ export function AdminSidebar() {
     { href: "/admin/donors", label: "Manage Donors", icon: Users },
     { href: "/admin/emergencies", label: "Emergency Requests", icon: AlertCircle },
     { href: "/admin/whatsapp", label: "WhatsApp Setup", icon: Smartphone },
+    { href: "/admin/sms", label: "SMS Setup", icon: Smartphone },
   ]
 
   return (

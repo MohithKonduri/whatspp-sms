@@ -9,14 +9,14 @@ import { Footer } from "@/components/footer"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { AlertCircle, Loader2, CheckCircle, Mail } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { auth, db } from "@/lib/firebase"
 import { doc, getDoc } from "firebase/firestore"
-import { createEmergencyRequest } from "@/lib/firestore-utils"
+import { createEmergencyRequest, searchDonors } from "@/lib/firestore-utils"
 import { sendEmail, sendEmergencyNotifications, ADMIN_EMAIL } from "@/lib/email-service"
-import { searchDonors } from "@/lib/firestore-utils"
 import { sendBloodRequestWhatsAppNotifications } from "@/lib/whatsapp-notifications"
+import { sendSMS } from "@/lib/twilio-service"
 
 const BLOOD_GROUPS = ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"]
 const DISTRICTS = [
@@ -273,6 +273,24 @@ export default function EmergencyPage() {
             contactName: formData.contactName,
             contactPhone: formData.contactPhone,
           })
+
+          // Send SMS notifications using Twilio
+          const donorsWithPhones = compatibleDonors
+            .filter(donor => donor.phone && donor.isAvailable)
+
+          if (donorsWithPhones.length > 0) {
+            console.log(`📱 Sending background SMS notifications to ${donorsWithPhones.length} donors via Twilio`)
+
+            const smsBody = `🚨 NSS URGENT: ${formData.bloodGroup} needed at ${formData.district}. Priority: ${formData.urgency.toUpperCase()}. Contact ${formData.contactName}: ${formData.contactPhone}. Details: ${formData.description.substring(0, 50)}...`
+
+            // Send SMS to each donor
+            await Promise.all(donorsWithPhones.map(donor =>
+              sendSMS({
+                to: donor.phone,
+                body: smsBody
+              })
+            ))
+          }
         } catch (notifierError) {
           console.error("Background notification error:", notifierError)
         }

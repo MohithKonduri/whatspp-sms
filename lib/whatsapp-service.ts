@@ -54,9 +54,6 @@ export async function initializeWhatsApp(waitForReady: boolean = true): Promise<
   if (state.isReady) return true
   if (state.initializationPromise) return state.initializationPromise
 
-  // Hard fix for Render/Docker: Force HOME to a writable directory
-  process.env.HOME = "/tmp"
-
   state.initializationPromise = (async (): Promise<boolean> => {
     if (state.isInitialized && state.client) return state.isReady
     try {
@@ -67,11 +64,14 @@ export async function initializeWhatsApp(waitForReady: boolean = true): Promise<
         throw new Error("Failed to load WhatsApp dependencies")
       }
 
-      // Cleanup stale Chrome locks (Common on Render/Docker restarts)
+      // Use OS-specific temp directory for Chrome and Auth data
+      const os = await import("os")
       const fs = await import("fs")
       const path = await import("path")
-      const userDataDir = "/tmp/wwebjs_chrome_data"
-      const authDataPath = "/tmp/wwebjs_auth"
+
+      const tmpDir = os.tmpdir()
+      const userDataDir = path.join(tmpDir, "wwebjs_chrome_data")
+      const authDataPath = path.join(tmpDir, "wwebjs_auth")
       const lockFile = path.join(userDataDir, "SingletonLock")
 
       try {
@@ -110,7 +110,7 @@ export async function initializeWhatsApp(waitForReady: boolean = true): Promise<
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
             "--disable-web-security",
           ],
-          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/google-chrome-stable",
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || (process.platform === 'win32' ? undefined : "/usr/bin/google-chrome-stable"),
         },
       })
 

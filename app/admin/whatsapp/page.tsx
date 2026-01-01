@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { CheckCircle, XCircle, Loader2, Smartphone, QrCode, LogOut, AlertCircle } from "lucide-react"
+import { CheckCircle, XCircle, Loader2, Smartphone, QrCode, LogOut, AlertCircle, Send, Users, MessageSquare } from "lucide-react"
 import { AdminSidebar } from "@/components/admin-sidebar"
+import { db } from "@/lib/firebase"
+import { collection, getDocs } from "firebase/firestore"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function AdminWhatsAppPage() {
   const router = useRouter()
@@ -28,6 +31,13 @@ export default function AdminWhatsAppPage() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [donorCount, setDonorCount] = useState(0)
+  const [donorsWithPhones, setDonorsWithPhones] = useState<any[]>([])
+  const [filteredDonors, setFilteredDonors] = useState<any[]>([])
+  const [selectedDistrict, setSelectedDistrict] = useState("all")
+  const [broadcastMessage, setBroadcastMessage] = useState("")
+  const [sending, setSending] = useState(false)
+  const [loadingStats, setLoadingStats] = useState(true)
 
   const checkStatus = async (silent: boolean = false) => {
     // frequent background checks shouldn't trigger full UI loading states if possible
@@ -107,6 +117,92 @@ export default function AdminWhatsAppPage() {
     }
   }
 
+  const fetchDonorStats = async () => {
+    setLoadingStats(true)
+    try {
+      const donorsCol = collection(db, "donors")
+      const donorSnapshot = await getDocs(donorsCol)
+      const donorList = donorSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+
+      const withPhones = donorList.filter((d: any) => d.phone)
+      setDonorCount(donorList.length)
+      setDonorsWithPhones(withPhones)
+      setFilteredDonors(withPhones)
+    } catch (err) {
+      console.error("Error fetching donor stats:", err)
+    } finally {
+      setLoadingStats(false)
+    }
+  }
+
+  const handleDistrictChange = (value: string) => {
+    setSelectedDistrict(value)
+    if (value === "all") {
+      setFilteredDonors(donorsWithPhones)
+    } else {
+      setFilteredDonors(donorsWithPhones.filter(d => d.district === value))
+    }
+  }
+
+  const DISTRICTS = [
+    "Adilabad", "Bhadradri Kothagudem", "Hyderabad", "Jagtial", "Jangaon",
+    "Jayashankar Bhupalpally", "Jogulamba Gadwal", "Kamareddy", "Karimnagar",
+    "Khammam", "Komaram Bheem Asifabad", "Mahabubabad", "Mahabubnagar",
+    "Mancherial", "Medak", "Medchal-Malkajgiri", "Mulugu", "Nagarkurnool",
+    "Nalgonda", "Narayanpet", "Nirmal", "Nizamabad", "Peddapalli",
+    "Rajanna Sircilla", "Rangareddy", "Sangareddy", "Siddipet", "Suryapet",
+    "Vikarabad", "Wanaparthy", "Warangal Urban", "Warangal Rural", "Yadadri Bhuvanagiri"
+  ]
+
+  const handleBroadcast = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!broadcastMessage.trim()) {
+      setError("Please enter a message")
+      return
+    }
+
+    if (filteredDonors.length === 0) {
+      setError("No donors found in the selected category")
+      return
+    }
+
+    if (!confirm(`Are you sure you want to send this WhatsApp broadcast to ${filteredDonors.length} donors?`)) {
+      return
+    }
+
+    setSending(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const recipients = filteredDonors.map(d => ({
+        phoneNumber: d.phone,
+        message: broadcastMessage
+      }))
+
+      const response = await fetch('/api/send-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ recipients })
+      })
+
+      const result = await response.json()
+
+      if (result.success || result.sent > 0) {
+        setSuccess(`Successfully sent WhatsApp messages to ${result.sent} donors! (${result.failed} failed)`)
+        setBroadcastMessage("")
+      } else {
+        throw new Error(result.error || "Failed to send broadcast")
+      }
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSending(false)
+    }
+  }
+
   useEffect(() => {
     // Check admin session
     const adminSession = localStorage.getItem("adminSession")
@@ -116,6 +212,7 @@ export default function AdminWhatsAppPage() {
     }
 
     checkStatus()
+    fetchDonorStats()
     // Check status more frequently when waiting for QR code or connection
     const interval = setInterval(() => {
       checkStatus(true)
@@ -303,7 +400,80 @@ export default function AdminWhatsAppPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Send className="h-5 w-5" />
+                  WhatsApp Broadcast
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-muted rounded-lg flex flex-col items-center justify-center text-center">
+                    <Users className="h-8 w-8 mb-2 text-blue-500" />
+                    <span className="text-2xl font-bold">{filteredDonors.length}</span>
+                    <span className="text-xs text-muted-foreground">Target Donors in {selectedDistrict === 'all' ? 'All Districts' : selectedDistrict}</span>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Filter by District</label>
+                    <select
+                      className="w-full p-2 rounded-md border border-input bg-background"
+                      value={selectedDistrict}
+                      onChange={(e) => handleDistrictChange(e.target.value)}
+                      disabled={sending || !status?.ready}
+                    >
+                      <option value="all">All Districts</option>
+                      {DISTRICTS.map(d => (
+                        <option key={d} value={d}>{d}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <form onSubmit={handleBroadcast} className="space-y-4 text-foreground">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Message Content</label>
+                    <Textarea
+                      placeholder="Enter the WhatsApp message..."
+                      className="min-h-[120px]"
+                      value={broadcastMessage}
+                      onChange={(e) => setBroadcastMessage(e.target.value)}
+                      disabled={sending || !status?.ready}
+                    />
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      Characters: {broadcastMessage.length}
+                    </p>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    className="w-full bg-green-600 hover:bg-green-700"
+                    disabled={sending || !status?.ready || filteredDonors.length === 0}
+                  >
+                    {sending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Sending WhatsApp Broadcast...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="mr-2 h-4 w-4" />
+                        Send Broadcast to {filteredDonors.length} Donors
+                      </>
+                    )}
+                  </Button>
+
+                  {!status?.ready && (
+                    <p className="text-xs text-center text-red-500 font-medium">
+                      Please connect WhatsApp above to enable broadcasting.
+                    </p>
+                  )}
+                </form>
+              </CardContent>
+            </Card>
+
+            <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Setup Instructions</CardTitle>
               </CardHeader>

@@ -29,3 +29,16 @@ next-env.d.ts
 # whatsapp-web.js auth data
 .wwebjs_auth/
 .wwebjs_cache/
+
+# secret-containing scripts and temp files
+update_test_creds.ps1
+restore_live_creds.ps1
+restore_env_direct.ps1
+restore_env.ps1
+fix-env.ps1
+test-sms.js
+test-email.js
+test_result.txt
+test_output.txt
+git_push_output.txt
+debug.log
